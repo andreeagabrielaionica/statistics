@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Hacker Attack Simulation</title>
+        <style>
+            #container {
+                display: flex;
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: center;
+            }
+            #graphCanvas {
+            border: 1px solid black;
+            border-radius: 5%;
+            width: 90vw;  /* Larghezza 95% della viewport */
+            height: 90vh; /* Altezza 95% della viewport */
+            }
+
+    
+            .input {
+                width: 100px;
+            }
+        </style>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    </head>
+    
+<body>
+    <div class="text-center">
+        <h1>Hacker Attack Simulation</h1>
+        <div class="container text-center"> <!-- Aggiunto per centrare il contenuto -->
+            <div class="row g-1" style="width: 100%; margin-bottom: 10px;">
+                <div class="col-lg-2 col-12">
+                    <label for="numHackers">Number of Hackers:  </label>
+                    <input class="form-control" type="number" id="numSimulations" value="200">
+                </div>
+                <div class="col-lg-2 col-12">
+                    <label for="numServers">Number of intervals: </label>
+                    <input class="form-control" type="number" id="numSteps" value="10000">
+                </div>
+                <div class="col-lg-2 col-12">
+                    <label for="probability">λ: </label>
+                    <input class="form-control" type="number" id="lambda" step="1" value="100">
+                </div>
+                <div class="col-lg-2 col-12">
+                    <label for="relPoint">Relative point (r): </label>
+                    <input class="form-control" type="number" id="intermediateStep" value="5000">
+                </div>
+                <div class="col-lg-2 col-12 d-flex align-items-end">
+                    <button type="button" class="btn btn-success" onclick="runSimulation()">Run Simulation</button>
+                </div>
+            </div>
+        </div>
+        
+        
+        
+        
+        
+    </div>
+    <div id="container">
+        <canvas id="graphCanvas"></canvas>
+    </div>
+    <script>
+        function runSimulation() {
+            // Input values
+            var n = parseInt(document.getElementById('numSimulations').value);
+            var m = parseInt(document.getElementById('numSteps').value) || 10000; // Number of servers
+            var lambda = parseFloat(document.getElementById('lambda').value);
+            var p = lambda / m; // Probability of single attack
+            var k = parseInt(document.getElementById('intermediateStep').value);
+            if (k > m) k = m; // Ensure k is within bounds
+
+            // Canvas for the main graph
+            var canvas = document.getElementById('graphCanvas');
+            var ctx = canvas.getContext('2d');
+
+            // Set canvas dimensions
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Margins
+            var marginLeft = 50;
+            var marginRight = 150; // Reserve space for final distribution histogram
+            var marginTop = 50;
+            var marginBottom = 50;
+
+            var plotWidth = canvas.width - marginLeft - marginRight;
+            var plotHeight = canvas.height - marginTop - marginBottom;
+
+            // X-axis step
+            var xStep = plotWidth / m;
+
+            // Generate colors for each trajectory
+            var colors = [];
+            for (var i = 0; i < n; i++) {
+                colors.push('hsl(' + (i * 360 / n) + ', 100%, 50%)');
+            }
+
+            // Arrays to store final values and values at intermediate step k
+            var finalValues = [];
+            var intermediateValues = [];
+
+            // Variables for mean and variance
+            var mean = 0;
+            var delta = 0;
+            var deviance = 0;
+
+            // Simulate trajectories
+            var maxAbsValue = 0; // For scaling Y-axis
+            var trajectories = []; // Store all trajectories
+
+            for (var sim = 0; sim < n; sim++) {
+                var X = [0]; // Initial value X0 = 0
+                for (var step = 1; step <= m; step++) {
+                    var jump = (Math.random() < p) ? 1 : 0; // Success or no change
+                    var X_new = X[step - 1] + jump;
+                    X.push(X_new);
+
+                    // Keep track of maximum value for scaling
+                    if (X_new > maxAbsValue) {
+                        maxAbsValue = X_new;
+                    }
+                }
+                trajectories.push(X);
+
+                // Collect final value
+                finalValues.push(X[m]);
+
+                // Collect value at intermediate step k
+                intermediateValues.push(X[k]);
+
+                // Update mean and variance calculations
+                var level = X[m];
+                var count = sim + 1;
+                delta = level - mean;
+                mean += delta / count;
+                deviance += delta * (level - mean);
+            }
+
+            // Variance
+            var variance = deviance / n;
+
+            // Calculate mean and variance for intermediateValues
+            var sum_k = 0;
+            for (var i = 0; i < intermediateValues.length; i++) {
+                sum_k += intermediateValues[i];
+            }
+            var mean_k = sum_k / intermediateValues.length;
+
+            var sumSquaredDiffs_k = 0;
+            for (var i = 0; i < intermediateValues.length; i++) {
+                var diff = intermediateValues[i] - mean_k;
+                sumSquaredDiffs_k += diff * diff;
+            }
+            var variance_k = sumSquaredDiffs_k / intermediateValues.length;
+
+            // Y-axis scaling
+            var yMax = Math.ceil(maxAbsValue) + 1;
+            var yMin = 0; // Since we don't decrease
+            var yRange = yMax - yMin;
+            var yScale = plotHeight / yRange;
+
+            // Zero is at the bottom
+            var yZero = marginTop + plotHeight;
+
+            // Draw Y-axis at x = marginLeft
+            ctx.beginPath();
+            ctx.moveTo(marginLeft, marginTop);
+            ctx.lineTo(marginLeft, marginTop + plotHeight);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw X-axis at y = yZero (at bottom)
+            ctx.beginPath();
+            ctx.moveTo(marginLeft, yZero);
+            ctx.lineTo(marginLeft + plotWidth, yZero);
+            ctx.stroke();
+
+            // Draw Y-axis labels
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.font = '12px Arial';
+            var yLabelStep = Math.ceil(yRange / 10);
+            for (var yValue = yMin; yValue <= yMax; yValue += yLabelStep) {
+                var yPos = marginTop + plotHeight - ((yValue - yMin) * yScale);
+                ctx.beginPath();
+                ctx.moveTo(marginLeft - 5, yPos);
+                ctx.lineTo(marginLeft, yPos);
+                ctx.stroke();
+                ctx.fillText(yValue, marginLeft - 10, yPos);
+            }
+
+            // Draw trajectories as step functions
+            for (var sim = 0; sim < n; sim++) {
+                ctx.strokeStyle = colors[sim];
+                ctx.beginPath();
+                var xPrev = marginLeft;
+                var yPrev = marginTop + plotHeight - ((trajectories[sim][0] - yMin) * yScale);
+                ctx.moveTo(xPrev, yPrev);
+
+                for (var step = 1; step <= m; step++) {
+                    var xCurr = marginLeft + step * xStep;
+                    var yCurr = marginTop + plotHeight - ((trajectories[sim][step] - yMin) * yScale);
+
+                    // Draw horizontal line to next time step
+                    ctx.lineTo(xCurr, yPrev);
+
+                    // Draw vertical line to new y value
+                    ctx.lineTo(xCurr, yCurr);
+
+                    // Update previous positions
+                    xPrev = xCurr;
+                    yPrev = yCurr;
+                }
+                ctx.stroke();
+            }
+
+            // Remove x-axis labels except at the end
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.font = '12px Arial';
+            var xLabel = m;
+            var xPos = marginLeft + plotWidth;
+            var yPos = yZero + 5;
+            ctx.fillText(xLabel, xPos, yPos);
+
+            // Draw final distribution histogram
+            var xStartFinalHistogram = marginLeft + plotWidth + 10;
+            var histogramWidth = marginRight - 20;
+            drawHistogram(ctx, finalValues, xStartFinalHistogram, marginTop, histogramWidth, plotHeight, yScale, yMin, yMax);
+
+            // Draw intermediate distribution histogram at step k
+            var xAtK = marginLeft + k * xStep;
+            var histogramWidthAtK = 0.15 * plotWidth;
+            drawHistogramAtK(ctx, intermediateValues, xAtK + 5, marginTop, histogramWidthAtK, plotHeight, yScale, yMin, yMax);
+
+            // Display mean and variance at step k
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            var textX_k = xAtK + histogramWidthAtK / 2;
+            var textY_k = marginTop + plotHeight + 20;
+            ctx.fillText('Mean at k: ' + mean_k.toFixed(2), textX_k, textY_k);
+            ctx.fillText('Variance at k: ' + variance_k.toFixed(2), textX_k, textY_k + 15);
+
+            // Display mean and variance for final values under the final histogram
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            var textX_final = xStartFinalHistogram + histogramWidth / 2;
+            var textY_final = marginTop + plotHeight + 20;
+            ctx.fillText('Mean: ' + mean.toFixed(2), textX_final, textY_final);
+            ctx.fillText('Variance: ' + variance.toFixed(2), textX_final, textY_final + 15);
+        }
+
+        function drawHistogram(ctx, data, xStart, yStart, histogramWidth, plotHeight, yScale, yMin, yMax) {
+            // Calculate frequencies
+            var frequencies = {};
+            data.forEach(function(value) {
+                var bin = Math.round(value);
+                frequencies[bin] = (frequencies[bin] || 0) + 1;
+            });
+
+            // Find max frequency
+            var maxFrequency = Math.max(...Object.values(frequencies));
+
+            // Draw histogram
+            for (var bin in frequencies) {
+                var freq = frequencies[bin];
+                var y = yStart + plotHeight - ((bin - yMin) * yScale) - yScale / 2;
+                var barHeight = yScale - 2;
+                var barLength = (freq / maxFrequency) * histogramWidth;
+                var x = xStart;
+
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(x, y - barHeight / 2, barLength, barHeight);
+                ctx.strokeStyle = 'black';
+                ctx.strokeRect(x, y - barHeight / 2, barLength, barHeight);
+            }
+        }
+
+        function drawHistogramAtK(ctx, data, xStart, yStart, histogramWidth, plotHeight, yScale, yMin, yMax) {
+            // Calculate frequencies
+            var frequencies = {};
+            data.forEach(function(value) {
+                var bin = Math.round(value);
+                frequencies[bin] = (frequencies[bin] || 0) + 1;
+            });
+
+            // Find max frequency
+            var maxFrequency = Math.max(...Object.values(frequencies));
+
+            // Draw histogram
+            for (var bin in frequencies) {
+                var freq = frequencies[bin];
+                var y = yStart + plotHeight - ((bin - yMin) * yScale) - yScale / 2;
+                var barHeight = yScale - 2;
+                var barLength = (freq / maxFrequency) * histogramWidth;
+                var x = xStart;
+
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(x, y - barHeight / 2, barLength, barHeight);
+                ctx.strokeStyle = 'black';
+                ctx.strokeRect(x, y - barHeight / 2, barLength, barHeight);
+            }
+        }
+    </script>
+</body>
+</html>
